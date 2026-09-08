@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Want It Need It — buyer listings</title>
+  <meta name="description" content="Craigslist flipped. Buyers post Wants and Needs. Sellers compete on the buyer’s terms. Money stays off-site." />
+  <style>
+    :root {
+      --bg: #0c0d10;
+      --card: #16181d;
+      --ink: #f3f1ea;
+      --mute: #9aa0ab;
+      --want: #e8c36a;
+      --need: #6ec8b4;
+      --line: #2a2d34;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Georgia, "Times New Roman", serif; background: var(--bg); color: var(--ink); }
+    header { padding: 28px 20px 12px; max-width: 920px; margin: 0 auto; }
+    h1 { font-size: 34px; margin: 0 0 6px; letter-spacing: -0.03em; }
+    h1 span.w { color: var(--want); } h1 span.n { color: var(--need); }
+    .sub { color: var(--mute); font-size: 16px; line-height: 1.45; max-width: 40em; }
+    nav { display: flex; gap: 8px; flex-wrap: wrap; margin: 18px 0 8px; }
+    button, .btn {
+      font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--ink);
+      padding: 8px 12px; border-radius: 999px; cursor: pointer;
+    }
+    button.active.want, .chip.want { border-color: var(--want); color: var(--want); }
+    button.active.need, .chip.need { border-color: var(--need); color: var(--need); }
+    main { max-width: 920px; margin: 0 auto; padding: 8px 20px 80px; }
+    form.card, article.card {
+      background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px 16px 14px; margin: 12px 0;
+    }
+    label { display: block; font-size: 13px; color: var(--mute); margin: 10px 0 4px; }
+    input, textarea, select {
+      width: 100%; background: #0c0d10; color: var(--ink); border: 1px solid var(--line);
+      border-radius: 10px; padding: 10px; font: inherit;
+    }
+    textarea { min-height: 90px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    @media (max-width: 640px) { .row { grid-template-columns: 1fr; } }
+    .meta { font-size: 13px; color: var(--mute); margin: 6px 0 10px; }
+    .acts { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .count { font-size: 13px; color: var(--mute); }
+    footer { max-width: 920px; margin: 0 auto; padding: 0 20px 40px; color: var(--mute); font-size: 14px; }
+    a { color: var(--need); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1><span class="w">Want It</span> / <span class="n">Need It</span></h1>
+    <p class="sub">Buyers list first. Sellers compete on the buyer’s terms. Payment happens off-site, buyer to seller. This board only shows demand and how many people pile onto the same price.</p>
+    <nav>
+      <button class="active" data-filter="all" type="button">All</button>
+      <button class="want" data-filter="want" type="button">Want it</button>
+      <button class="need" data-filter="need" type="button">Need it</button>
+      <button type="button" id="postBtn">Post a listing</button>
+    </nav>
+  </header>
+  <main>
+    <form class="card" id="postForm" hidden>
+      <label>Type
+        <select id="kind">
+          <option value="want">Want it — vague, optional price</option>
+          <option value="need">Need it — real need, price rule required</option>
+        </select>
+      </label>
+      <label>What
+        <textarea id="what" placeholder="A quiet cabin week, a used HW4 Model 3, someone to cut a 20s jingle…"></textarea>
+      </label>
+      <div class="row">
+        <label>Price mode
+          <select id="priceMode">
+            <option value="none">No number (Want only)</option>
+            <option value="interested">Interested at about $</option>
+            <option value="max">Hard maximum $</option>
+            <option value="flexmin">Flexible minimum I’ll pay $</option>
+          </select>
+        </label>
+        <label>Amount USD
+          <input id="amount" type="number" min="0" step="1" placeholder="optional" />
+        </label>
+      </div>
+      <label>Where (optional)
+        <input id="where" placeholder="Cleveland GA / anywhere / remote" />
+      </label>
+      <label>How sellers reach you (email or X — shown on the card)
+        <input id="contact" placeholder="@handle or you@email" />
+      </label>
+      <p class="meta">No checkout here. If someone can fill it, they contact you and you settle off-site.</p>
+      <button type="submit">Publish listing</button>
+    </form>
+    <div id="feed"></div>
+  </main>
+  <footer>
+    Daily X threads: reply under NEED IT or WANT IT. An agent copies yesterday’s replies onto this board when the new thread goes up.
+    Source: github.com/omgawdmadeit1/wantitneedit
+  </footer>
+  <script>
+    const KEY = "wini-listings-v1";
+    const seed = [
+      { id: "s1", kind: "need", what: "Used Tesla Model 3 or Y with Hardware 4, clean title, for a 50-mile weekday commute Cleveland–Gainesville GA.", priceMode: "max", amount: 38000, where: "North Georgia", contact: "@OmgawdMadeit", likes: 2, pile: 3, created: Date.now() - 86400000 },
+      { id: "s2", kind: "want", what: "A week in a quiet house that feels like an island even if it isn’t — kids ok, dogs maybe.", priceMode: "interested", amount: 0, where: "anywhere warm", contact: "reply on X", likes: 1, pile: 1, created: Date.now() - 3600000 }
+    ];
+    const load = () => JSON.parse(localStorage.getItem(KEY) || "null") || seed;
+    const save = (rows) => localStorage.setItem(KEY, JSON.stringify(rows));
+    let rows = load();
+    let filter = "all";
+    const money = (r) => {
+      if (r.priceMode === "none" || r.amount == null || r.amount === "") return "no price";
+      if (r.priceMode === "max") return "hard max $" + r.amount;
+      if (r.priceMode === "flexmin") return "flexible min $" + r.amount;
+      if (r.priceMode === "interested") return r.amount ? "interested around $" + r.amount : "curious, no number";
+      return "";
+    };
+    function render() {
+      const feed = document.getElementById("feed");
+      const list = rows.filter(r => filter === "all" || r.kind === filter).sort((a,b) => b.created - a.created);
+      feed.innerHTML = list.map(r => `
+        <article class="card" data-id="${r.id}">
+          <span class="chip ${r.kind}">${r.kind === "want" ? "WANT IT" : "NEED IT"}</span>
+          <p>${escapeHtml(r.what)}</p>
+          <p class="meta">${money(r)} · ${escapeHtml(r.where || "unspecified")} · ${escapeHtml(r.contact || "no contact")}</p>
+          <div class="acts">
+            <button data-act="like">Like ${r.likes || 0}</button>
+            <button data-act="pile">${r.kind === "want" ? "Want it too" : "Need it too"} ${r.pile || 0}</button>
+            <span class="count">Pile = people at this price band. Seller can cut unit price for quantity.</span>
+          </div>
+        </article>`).join("") || "<p class='meta'>No listings in this filter.</p>";
+    }
+    function escapeHtml(s) {
+      return String(s || "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+    }
+    document.querySelectorAll("[data-filter]").forEach(b => {
+      b.addEventListener("click", () => {
+        filter = b.dataset.filter;
+        document.querySelectorAll("[data-filter]").forEach(x => x.classList.remove("active"));
+        b.classList.add("active");
+        render();
+      });
+    });
+    document.getElementById("postBtn").onclick = () => {
+      document.getElementById("postForm").hidden = !document.getElementById("postForm").hidden;
+    };
+    document.getElementById("postForm").onsubmit = (e) => {
+      e.preventDefault();
+      const kind = document.getElementById("kind").value;
+      const priceMode = document.getElementById("priceMode").value;
+      const amount = document.getElementById("amount").value;
+      if (kind === "need" && (priceMode === "none" || amount === "")) {
+        alert("Need it requires a price rule and a number.");
+        return;
+      }
+      rows.unshift({
+        id: "l" + Date.now(), kind,
+        what: document.getElementById("what").value.trim(),
+        priceMode, amount: amount === "" ? null : Number(amount),
+        where: document.getElementById("where").value.trim(),
+        contact: document.getElementById("contact").value.trim(),
+        likes: 0, pile: 1, created: Date.now()
+      });
+      save(rows); e.target.reset(); e.target.hidden = true; render();
+    };
+    document.getElementById("feed").onclick = (e) => {
+      const btn = e.target.closest("button[data-act]");
+      if (!btn) return;
+      const id = btn.closest("article").dataset.id;
+      const row = rows.find(r => r.id === id);
+      if (btn.dataset.act === "like") row.likes = (row.likes || 0) + 1;
+      if (btn.dataset.act === "pile") row.pile = (row.pile || 0) + 1;
+      save(rows); render();
+    };
+    render();
+  </script>
+</body>
+</html>
